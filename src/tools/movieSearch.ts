@@ -1,6 +1,6 @@
 import type { ToolFn } from '../../types'
 import { z } from 'zod'
-import { queryMovies } from '../rag/query'
+import { queryMovies } from '../rag/querymovie'
 
 export const movieSearchToolDefinition = {
   name: 'movieSearch',

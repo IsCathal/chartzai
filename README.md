@@ -58,3 +58,6 @@ Then run the eval with the full path to the file. For example:
 ```
 npx tsx evals/experiments/reddit.eval.ts
 ```
+
+
+npm start "find the top 5 scariest movies and then Generate a bar chart of the top 5 highest rated movies, using title for x-axis and rating for y-axis"

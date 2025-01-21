@@ -3,10 +3,11 @@ import {
   generateImage,
   generateImageToolDefinition,
 } from './tools/generateImage'
-import { reddit, redditToolDefinition } from './tools/reddit'
+// import { reddit, redditToolDefinition } from './tools/reddit'
 import { dadJoke, dadJokeToolDefinition } from './tools/dadJoke'
 import { movieSearch, movieSearchToolDefinition } from './tools/movieSearch'
 import { redditSearch, redditSearchToolDefinition } from './tools/redditSearch'
+import { chartGenerator, chartGeneratorToolDefinition } from './tools/chartGenerator'
 
 export const runTool = async (
   toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
@@ -21,8 +22,8 @@ export const runTool = async (
     case generateImageToolDefinition.name:
       return generateImage(input)
 
-    case redditToolDefinition.name:
-      return reddit(input)
+    // case redditToolDefinition.name:
+    //   return reddit(input)
 
     case dadJokeToolDefinition.name:
       return dadJoke(input)
@@ -32,6 +33,9 @@ export const runTool = async (
 
     case redditSearchToolDefinition.name:
       return redditSearch(input)
+
+    case chartGeneratorToolDefinition.name:
+      return chartGenerator(input)
 
     default:
       return `Never run this tool: ${toolCall.function.name} again, or else!`
