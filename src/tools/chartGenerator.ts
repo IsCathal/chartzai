@@ -1,96 +1,100 @@
-import type { ToolFn } from '../../types'
+import { ChartJSNodeCanvas } from 'chartjs-node-canvas'
 import { z } from 'zod'
-import { readFileSync } from 'fs'
-
-// If you're on Node.js < 18, install "node-fetch" and import it. 
-// If you're on Node.js 18+, the 'fetch' API is built-in.
-// import fetch from 'node-fetch'
+import { writeFileSync } from 'fs'
+import { join } from 'path'
 
 export const chartGeneratorToolDefinition = {
   name: 'chartGenerator',
   description:
-    'Generates a chart (as an image URL) from the array of movies in db.json. Provide chart type and x/y fields to plot.',
+    'Generates a colorful chart as a PNG file using Chart.js. Provide chart type and data to render.',
   parameters: z.object({
     chartType: z.enum(['bar', 'line', 'pie']).describe('The type of chart'),
-    xField: z.string().describe('Key in the data to map onto the x-axis'),
-    yField: z.string().describe('Key in the data to map onto the y-axis'),
-    limit: z.number().optional().describe('Optionally limit the number of data points'),
+    data: z.object({
+      labels: z.array(z.string()).describe('Labels for the x-axis'),
+      datasets: z.array(
+        z.object({
+          label: z.string().describe('Label for the dataset'),
+          data: z.array(z.number()).describe('Data points for the dataset'),
+        })
+      ).describe('Array of datasets to plot'),
+    }).describe('Chart.js-compatible data object'),
+    options: z
+      .object({})
+      .optional()
+      .describe('Optional Chart.js configuration options'),
   }),
 }
 
 type ChartGeneratorArgs = z.infer<typeof chartGeneratorToolDefinition.parameters>
 
-export const chartGenerator: ToolFn<ChartGeneratorArgs, string> = async ({ toolArgs }) => {
-  const { chartType, xField, yField, limit } = toolArgs
+const width = 800 // Canvas width
+const height = 600 // Canvas height
+const chartJSNodeCanvas = new ChartJSNodeCanvas({ width, height })
 
-  let dbData
+export const chartGenerator = async ({
+  toolArgs,
+}: {
+  toolArgs: ChartGeneratorArgs
+}): Promise<string> => {
+  const { chartType, data, options } = toolArgs
+
   try {
-    dbData = JSON.parse(readFileSync('db.json', 'utf8'))
-  } catch (error) {
-    console.error(error)
-    return 'Error: Failed to read db.json'
-  }
+    // Generate colorful chart data by adding colors
+    const colors = generateColors(data.labels.length)
+    const enhancedDatasets = data.datasets.map((dataset, index) => ({
+      ...dataset,
+      backgroundColor: chartType === 'pie' ? colors : colors[index], // Use different colors for pie charts
+      borderColor: chartType === 'line' ? colors[index] : undefined, // Line chart gets border colors
+      borderWidth: 1,
+    }))
 
-  // dbData is expected to be an object containing { messages: [ ... ] }
-  if (!dbData || !Array.isArray(dbData.messages)) {
-    return 'Error: db.json has no "messages" array'
-  }
-
-  // 1) Find the last "tool" role that presumably has the array of movies
-  const toolMessages = dbData.messages.filter((m: any) => m.role === 'tool')
-  if (!toolMessages.length) {
-    return 'Error: No tool messages found in db.json'
-  }
-
-  const lastToolMsg = toolMessages[toolMessages.length - 1]
-
-  // 2) Parse the actual array of movies stored in `lastToolMsg.content`
-  let movies
-  try {
-    movies = JSON.parse(lastToolMsg.content)
-  } catch (err) {
-    console.error(err)
-    return 'Error: The tool message content is not valid JSON'
-  }
-
-  if (!Array.isArray(movies)) {
-    return 'Error: The last tool message content is not an array'
-  }
-
-  // (Optional) limit results
-  const sliced = limit ? movies.slice(0, limit) : movies
-
-  // 3) Build Chart.js-compatible chart object
-  const chartConfig = {
-    type: chartType, // e.g. 'bar'
-    data: {
-      labels: sliced.map((item) => String(item[xField] ?? '')),
-      datasets: [
-        {
-          label: `${yField} by ${xField}`,
-          data: sliced.map((item) => Number(item[yField] ?? 0)),
+    const chartConfig = {
+      type: chartType,
+      data: {
+        ...data,
+        datasets: enhancedDatasets,
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: 'top',
+          },
         },
-      ],
-    },
-  }
-
-  // 4) Send chartConfig to QuickChart to generate a chart image URL
-  try {
-    const response = await fetch('https://quickchart.io/chart/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chart: chartConfig }),
-    })
-
-    const result = await response.json()
-    if (!result.url) {
-      return 'Error: QuickChart did not return a chart URL.'
+        ...options,
+      },
     }
 
-    // Return the final chart image URL
-    return result.url
-  } catch (err) {
-    console.error('Error generating chart image:', err)
-    return 'Error: Failed to generate chart image.'
+    // Render the chart to a PNG buffer
+    const imageBuffer = await chartJSNodeCanvas.renderToBuffer(chartConfig)
+
+    // Save to the root directory
+    const rootDirectory = process.cwd() // Current working directory (root of the project)
+    const fileName = `chart_${Date.now()}.png` // Unique file name
+    const outputPath = join(rootDirectory, fileName)
+
+    writeFileSync(outputPath, imageBuffer)
+    console.log(`Chart saved to ${outputPath}`)
+
+    return `Chart saved at: ${outputPath}`
+  } catch (error) {
+    console.error('Error generating chart:', error)
+    return 'Error: Failed to generate chart'
   }
+}
+
+// Helper function to generate a color palette
+const generateColors = (count: number): string[] => {
+  const baseColors = [
+    '#FF6384', // Red
+    '#36A2EB', // Blue
+    '#FFCE56', // Yellow
+    '#4BC0C0', // Teal
+    '#9966FF', // Purple
+    '#FF9F40', // Orange
+    '#E7E9ED', // Gray
+  ]
+
+  // Repeat colors if there are more labels than base colors
+  return Array.from({ length: count }, (_, i) => baseColors[i % baseColors.length])
 }
